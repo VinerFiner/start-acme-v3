@@ -1,0 +1,143 @@
+# ------------------------------------
+#   欢迎您使用阿里云函数计算 fc3 组件进行项目开发
+#   组件仓库地址：https://github.com/devsapp/fc3
+#   组件帮助文档：https://manual.serverless-devs.com/user-guide/aliyun/#fc3
+#   Yaml参考文档：https://manual.serverless-devs.com/user-guide/aliyun/fc3/spec/
+#   关于Serverless Devs和FC组件的关系、如何声明/部署多个函数等问题，可以参考文档：https://manual.serverless-devs.com/user-guide/tips/
+#   关于如何做CICD等问题，可以参考：https://manual.serverless-devs.com/user-guide/cicd/
+#   关于如何进行环境划分等问题，可以参考：https://docs.serverless-devs.com/practices/multi-env/
+#   更多函数计算案例，可参考：https://github.com/devsapp/awesome/
+#   有问题快来钉钉群问一下吧：33947367
+# ------------------------------------
+edition: 3.0.0
+name: fc-acme-application
+# access 是当前应用所需要的密钥信息配置：
+# 密钥配置可以参考：https://docs.serverless-devs.com/user-guide/builtin/config/
+# 密钥使用顺序可以参考：https://docs.serverless-devs.com/dev-guide/cli_design/#_11
+access: "{{ access }}"
+
+vars: # 全局变量
+  region: "{{ region }}"
+  certGeneratorFunctionName: "{{ certGeneratorFunctionName }}"
+  certGeneraterEnv:     # 为函数配置环境变量
+    # 证书申请
+    DNS_TYPE: "{{ DNS_TYPE }}"
+    Ali_Key: ${env('Ali_Key')}
+    Ali_Secret: ${env('Ali_Secret')}
+    # # 腾讯云
+    # DNS_TYPE: 'dns_dp'
+    # DP_Id: ${env(DP_Id)}
+    # DP_Key: ${env(DP_Key)}
+    # # CF
+    # DNS_TYPE: 'dns_cf'
+    # CF_Token: ${env(CF_Token)}
+    # CF_Account_ID: ${env(CF_Account_ID)}
+    # Flask 路径
+    PYTHONPATH: /opt/python:/code/python:/code
+    PATH: /var/fc/lang/python3.10/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/ruby/bin:/opt/bin:/code:/code/bin
+  # logConfig:
+  #   enableRequestMetrics: true
+  #   enableInstanceMetrics: true
+  #   logBeginRule: None
+  #   project: aliyun-fc-${vars.region}
+  #   logstore: function-log
+  # ossMountConfig:
+  #   mountPoints:
+  #     - bucketName: "fc-acme-oss"
+  #       endpoint: "http://oss-${vars.region}-internal.aliyuncs.com"
+  #       bucketPath: '/fc-acme'
+  #       mountDir: /mnt/auto/nginx
+  #       readOnly: false
+  # 函数部署
+  fcDomainManagerFunctionName: "{{ fcDomainManagerFunctionName }}"
+
+resources:
+  invoke-acme-app:
+    # 如果只想针对 fc-invoke-acme 下面的业务进行相关操作，可以在命令行中加上 fc-invoke-acme，例如：
+    # 只对 fc-invoke-acme 进行构建：s fc-invoke-acme build
+    # 如果不带有 fc-invoke-acme ，而是直接执行 s build，工具则会对当前Yaml下，所有和 fc-invoke-acme 平级的业务模块（如有其他平级的模块，例如下面注释的next_function），按照一定顺序进行 build 操作
+    component: fc3 # 组件名称，Serverless Devs 工具本身类似于一种游戏机，不具备具体的业务能力，组件类似于游戏卡，用户通过向游戏机中插入不同的游戏卡实现不同的功能，即通过使用不同的组件实现不同的具体业务能力
+    actions: # 自定义执行逻辑，关于actions 的使用，可以参考：https://www.serverless-devs.com/serverless-devs/yaml#行为描述
+      pre-deploy: # 在deploy之前运行 
+        # 安装 Acme
+        - run: bash acme.sh --install --home ./../cert-generator/acme-home --accountemail \"my@example.com\" --nocron
+          path: ./acme.sh                                                # 执行系统命令/钩子的路径
+        # 安装 Flask
+        - run: mkdir python
+          path: ./cert-generator
+        - run: export PATH=/usr/local/envs/py310/bin:$PATH && pip3 install -r requirements.txt -t ./python
+          path: ./cert-generator
+    props:
+      region: ${vars.region}              # 关于变量的使用方法，可以参考：https://docs.serverless-devs.com/serverless-devs/yaml#%E5%8F%98%E9%87%8F%E8%B5%8B%E5%80%BC
+      functionName: ${vars.certGeneratorFunctionName} # 函数名
+      description: '申请acme证书'
+      timeout: 600
+      cpu: 0.25
+      memorySize: 256
+      diskSize: 512
+      instanceConcurrency: 10
+      runtime: custom.debian10
+      customRuntimeConfig:
+        command:
+          - python3
+          - index.py
+        port: 9000
+      code: ./cert-generator
+      # 其他配置
+      environmentVariables: ${vars.certGeneraterEnv}  #  为函数配置环境变量
+      # role: 'AliyunFCDefaultRole'
+      # ossMountConfig: ${vars.ossMountConfig}
+      # logConfig: ${vars.logConfig}
+      triggers:
+        - triggerName: httpTrigger
+          triggerType: http
+          triggerConfig:
+            methods:
+              - GET
+              - POST
+            authType: anonymous
+  # 证书管理
+  fc-domain-manager:
+    component: fc3
+    actions:
+      pre-deploy:
+        - run: export PATH=/usr/local/versions/node/v20.8.1/bin:$PATH && npm install
+          path: ./fc-domain-manager
+    props:
+      region: ${vars.region}
+      handler: index.handler
+      role: "{{ role }}"
+      timeout: 900
+      cpu: 2
+      memorySize: 4096
+      diskSize: 512
+      internetAccess: true
+      functionName: ${vars.fcDomainManagerFunctionName}
+      runtime: nodejs20
+      environmentVariables:
+        CUSTOM_DOMAIN_REGIONS: cn-beijing,cn-hangzhou,cn-shanghai,cn-qingdao,cn-zhangjiakou,cn-huhehaote,cn-shenzhen,cn-chengdu
+        CERT_GENERATOR_FUNCTION_NAME: ${vars.certGeneratorFunctionName}
+      code: ./fc-domain-manager
+      triggers:
+        - triggerConfig:
+            payload: ""
+            cronExpression: CRON_TZ=Asia/Shanghai 0 0 0 * * *
+            enable: true
+          triggerName: time-trigger
+          qualifier: LATEST
+          triggerType: timer
+  # next_function: # 第二个函数的案例，仅供参考
+  #  # 如果在当前项目下执行 s deploy，会同时部署模块
+  #  # 如果想单独部署当前服务与函数，可以执行 s + 模块名/业务名 + deploy，例如：s next_function deploy
+  #  # 如果想单独部署当前函数，可以执行 s + 模块名/业务名 + deploy function，例如：s next_function deploy function
+  #  # 更多命令可参考：https://manual.serverless-devs.com/user-guide/aliyun/#fc3
+  #   component: fc3
+  #   props:
+  #     region: ${vars.region}
+  #     functionName: next_function_example
+  #     description: 'hello world by serverless devs'
+  #     runtime: "nodejs14"
+  #     code: ./code
+  #     handler: index.handler
+  #     memorySize: 128
+  #     timeout: 60
