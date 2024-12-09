@@ -65,6 +65,37 @@
   - 初始化项目：`s init start-acme-v3 -d acme-v3`
   - 进入项目，并进行项目部署：`cd acme-v3 && s deploy -y`
 
+## 使用文档
+
+<usedetail id="flushContent">
+
+1. 部署成功后，请找到部署在杭州地域的 `fc-domain-manager` 函数。并进入函数详情页面。
+2. 点击“代码”页签中，“测试函数”旁边的下拉按钮，并点击“配置测试参数”。
+  ![config](https://img.alicdn.com/imgextra/i3/O1CN018m9BmT1VBig71p3on_!!6000000002615-0-tps-672-554.jpg)
+3. 输入您的要生成证书的域名的 JSON 内容，并点击“确定”。
+   ```
+      {
+          "domainName": "abc.mydomain.com"
+      }
+    ```
+    提示：支持通配符域名。
+    ```
+      {
+          "domainName": "*.mydomain.com"
+      }
+    ```
+   ![config](https://img.alicdn.com/imgextra/i3/O1CN01tbCzNf1Rm7hEBvpPZ_!!6000000002153-0-tps-1792-1612.jpg)
+4. 点击“测试”来调用函数，并生成域名。
+   ![config](https://img.alicdn.com/imgextra/i4/O1CN018es5JV1bB9t7GM8RG_!!6000000003426-0-tps-672-420.jpg)
+5. 应用将使用 acme 通过 Let's Encrypt 生成证书，并将此证书上传到[数字证书管理服务](https://yundun.console.aliyun.com/?p=cas#/certExtend/upload/cn-hangzhou)。
+6. 您可以在函数计算自定义域名创建或编辑页面中使用此证书。
+   ![config](https://img.alicdn.com/imgextra/i2/O1CN010mXNqs1khyoTsmBoS_!!6000000004716-0-tps-1556-1198.jpg)
+7. 每天凌晨，此应用会遍历您的函数计算自定义域名。在发现此应用生成的证书后，将自动检查证书的有效期，如果证书将在 7 天内过期，会更换证书，并更新函数计算自定义域名的证书配置。
+
+</usedetail>
+
+> 同类型应用 [https://github.com/devsapp/fc-certbot](https://github.com/devsapp/fc-certbot)
+
 </deploy>
 
 <devgroup>

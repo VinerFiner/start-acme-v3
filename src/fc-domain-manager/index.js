@@ -47,6 +47,7 @@ function checkIfLessThanSevenDays(endTime) {
   return false;
 }
 
+
 async function getCertByName(certName, context) {
   const client = getCasClient(context);
   let currentPage = 1;
@@ -220,31 +221,45 @@ async function createAndUploadCert(domainName, certName, certId, context) {
 }
 
 async function forceUpdateCustomDomain(domainName, customDomain, context) {
-  console.log(`force update ${domainName} 自定义域名:${JSON.stringify(customDomain.domainName)}`);
-  var certName = customDomain.certConfig.certName;
-  if (certName == null) {
-    // certName = domainName.replace(/\./g, '_');
-    certName = getCertName(domainName, certName);
+  if (customDomain == null) {
+    console.log(`force update ${domainName} 自定义域名`);
+    var certName = getCertName(domainName, null);
     console.log(`新证书名为: certName: ${certName}`);
-  }
-  const certInfo = await fetchCertAutoUpdate(domainName, certName, context);
-  if (certInfo) {
-    if (customDomain.domainName == certInfo.common) {
-      if (customDomain.certConfig.certConfig == certInfo.cert) {
-        console.log(
-          `No need to update ${customDomain.domainName} because it already has the latest cert`
-        );
-        return;
-      } else {
-        console.log(`Updating ${customDomain.domainName} with new cert ${certName}`);
-        await updateCustomDomain(customDomain, certName, certInfo, context);
-        return;
-      }
+    const certInfo = await fetchCertAutoUpdate(domainName, certName, context);
+    if (certInfo) {
+      console.log(
+        `Please Selected ${certName } to update ${domainName}`
+      );
     } else {
-      throw new Error(`domainName: ${domainName} and cert common: ${cert.common} do not match`);
+      throw new Error(`Failed to check cert ${certName}`);
     }
   } else {
-    throw new Error(`Failed to check cert ${certName}`);
+    console.log(`force update ${domainName} 自定义域名:${JSON.stringify(customDomain.domainName)}`);
+    var certName = customDomain.certConfig.certName;
+    if (certName == null) {
+      // certName = domainName.replace(/\./g, '_');
+      certName = getCertName(domainName, certName);
+      console.log(`新证书名为: certName: ${certName}`);
+    }
+    const certInfo = await fetchCertAutoUpdate(domainName, certName, context);
+    if (certInfo) {
+      if (customDomain.domainName == certInfo.common) {
+        if (customDomain.certConfig.certConfig == certInfo.cert) {
+          console.log(
+            `No need to update ${customDomain.domainName} because it already has the latest cert`
+          );
+          return;
+        } else {
+          console.log(`Updating ${customDomain.domainName} with new cert ${certName}`);
+          await updateCustomDomain(customDomain, certName, certInfo, context);
+          return;
+        }
+      } else {
+        throw new Error(`domainName: ${domainName} and cert common: ${cert.common} do not match`);
+      }
+    } else {
+      throw new Error(`Failed to check cert ${certName}`);
+    }
   }
 }
 
@@ -366,11 +381,9 @@ exports.handler = async (event, context, callback) => {
   out = out.flat();
   if (domainName) {
     let customDomain = out.find((element) => element.domainName === domainName);
-    if (customDomain) {
-      await forceUpdateCustomDomain(domainName, customDomain, context);
-    } else {
-      console.log(`No custom domain ${domainName} found`);
-    }
+
+    await forceUpdateCustomDomain(domainName, customDomain, context);
+
   } else {
     const map = {};
     out.forEach((c) => {
